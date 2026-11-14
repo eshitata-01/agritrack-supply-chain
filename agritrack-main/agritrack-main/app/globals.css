@@ -155,6 +155,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .topbar { height: 66px; flex: 0 0 66px; position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 25px; padding: 0 31px; border-bottom: 1px solid #e9eee8; background: rgba(255,255,255,.94); backdrop-filter: blur(12px); }
 .topbar-breadcrumb { min-width: 169px; display: flex; align-items: center; gap: 9px; color: #97a097; font-size: 11px; white-space: nowrap; }
 .topbar-breadcrumb strong { color: #3b5144; font-size: 11px; font-weight: 650; }
+.data-mode-indicator { flex: 0 0 auto; padding: 5px 8px; border: 1px solid #e4ebe3; border-radius: 999px; color: #66756a; background: #f7faf6; font-size: 9px; font-weight: 650; white-space: nowrap; }
+.data-mode-indicator.oracle { color: #23613a; border-color: #cfe5d2; background: #f1f8f1; }
+.data-mode-indicator.demo { color: #8b5b20; border-color: #f0dfbd; background: #fff9ed; }
 .breadcrumb-slash { color: #c3cbc3; }
 .global-search-wrap { position: relative; width: min(360px, 38vw); margin: 0 auto; }
 .global-search { height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid #e8ede7; border-radius: 8px; background: #fafbf9; color: #909a91; }
@@ -644,6 +647,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .mobile-menu-button { display: inline-grid !important; width: 31px; height: 31px; }
   .topbar { height: 58px; flex-basis: 58px; gap: 9px; padding-inline: 12px; }
   .topbar-breadcrumb { min-width: 0; flex: 1; gap: 6px; font-size: 9px; }
+  .data-mode-indicator { padding: 4px 6px; font-size: 8px; }
   .topbar-breadcrumb > span:first-child, .breadcrumb-slash { display: none; }
   .topbar-breadcrumb strong { max-width: 120px; overflow: hidden; font-size: 10px; text-overflow: ellipsis; }
   .global-search-wrap { width: 34px; flex: 0 0 34px; margin: 0; }

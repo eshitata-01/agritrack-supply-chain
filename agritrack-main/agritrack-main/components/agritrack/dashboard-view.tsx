@@ -5,7 +5,6 @@ import { useMemo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { DashboardCharts } from "@/components/agritrack/dashboard-charts"
 import {
-  FACILITIES,
   formatDate,
   formatKg,
   formatTonnes,
@@ -131,7 +130,7 @@ export function DashboardView({ shipments, crops, onOpenShipment, onNavigate }: 
   const highestRoute = routeTotals[0]
   const monthly = getMonthlyTrend(filtered)
   const recentShipments = [...filtered].sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate)).slice(0, 5)
-  const activeFacilities = new Set(filtered.map((item) => item.facilityId)).size || FACILITIES.length
+  const activeFacilities = new Set(filtered.map((item) => item.facilityId).filter(Boolean)).size
 
   return (
     <div className="page-stack">
@@ -206,7 +205,7 @@ export function DashboardView({ shipments, crops, onOpenShipment, onNavigate }: 
           <button className="insights-link" onClick={() => onNavigate("Loss Detection")}>Explore loss detection <span aria-hidden="true">→</span></button>
         </Card>
       </section>
-      <p className="data-footnote">Metrics reflect {filtered.length} shipment records · Values are calculated from the sample dataset</p>
+      <p className="data-footnote">Metrics reflect {filtered.length} shipment records in the current data source.</p>
     </div>
   )
 }

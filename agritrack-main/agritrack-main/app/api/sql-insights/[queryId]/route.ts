@@ -17,7 +17,7 @@ const allowedQueries: Record<string, string> = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ queryId: string }> },
 ) {
   const { queryId } = await params;
@@ -26,16 +26,15 @@ export async function GET(
     return NextResponse.json({ error: "Unknown query ID" }, { status: 404 });
   }
 
+  const sqlPath = path.join(process.cwd(), "database", "queries", filename);
+  const sql = await readFile(sqlPath, "utf8");
+  if (new URL(request.url).searchParams.get("sqlOnly") === "1") {
+    return NextResponse.json({ queryId, filename, sql, mode: "demo" });
+  }
   try {
-    const sqlPath = path.join(process.cwd(), "database", "queries", filename);
-    const sql = await readFile(sqlPath, "utf8");
     const rows = await runOracleQuery(sql);
-    return NextResponse.json({ queryId, filename, rows });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Query execution failed";
-    return NextResponse.json(
-      { error: message, hint: "Check Oracle configuration and run the schema, views, and seed scripts." },
-      { status: 503 },
-    );
+    return NextResponse.json({ queryId, filename, sql, mode: "oracle", rows });
+  } catch {
+    return NextResponse.json({ queryId, filename, sql, mode: "demo", rows: null, error: "Oracle query is unavailable; showing the clearly labelled local demo preview." });
   }
 }

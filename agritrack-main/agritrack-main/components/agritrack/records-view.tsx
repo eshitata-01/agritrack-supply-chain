@@ -32,36 +32,36 @@ function titleCase(value: string) {
   return value.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())
 }
 
-function fieldsFor(tab: TabName): Field[] {
+function fieldsFor(tab: TabName, crops: CropDefinition[], facilities: typeof FACILITIES, routes: typeof ROUTES, regions: string[]): Field[] {
   if (tab === "Crops") return [
     { key: "crop", label: "Crop name", required: true },
     { key: "category", label: "Category", type: "select", options: ["Grain", "Vegetable", "Fruit"], required: true },
     { key: "season", label: "Growing season", type: "select", options: ["Kharif", "Rabi", "Summer", "All season"], required: true },
   ]
   if (tab === "Harvest Records") return [
-    { key: "crop", label: "Crop", type: "select", options: CROP_DEFINITIONS.map((item) => item.name), required: true },
-    { key: "region", label: "Region", type: "select", options: REGIONS, required: true },
+    { key: "crop", label: "Crop", type: "select", options: crops.map((item) => item.name), required: true },
+    { key: "region", label: "Region", type: "select", options: regions, required: true },
     { key: "quantityHarvestedKg", label: "Quantity harvested (kg)", type: "number", min: 1, required: true },
     { key: "harvestDate", label: "Harvest date", type: "date", required: true },
   ]
   if (tab === "Storage Records") return [
-    { key: "crop", label: "Crop", type: "select", options: CROP_DEFINITIONS.map((item) => item.name), required: true },
-    { key: "region", label: "Region", type: "select", options: REGIONS, required: true },
-    { key: "facility", label: "Storage facility", type: "select", options: FACILITIES.map((item) => item.name), required: true },
+    { key: "crop", label: "Crop", type: "select", options: crops.map((item) => item.name), required: true },
+    { key: "region", label: "Region", type: "select", options: regions, required: true },
+    { key: "facility", label: "Storage facility", type: "select", options: facilities.map((item) => item.name), required: true },
     { key: "storageDays", label: "Storage duration (days)", type: "number", min: 0, required: true },
     { key: "quantityLostKg", label: "Quantity lost (kg)", type: "number", min: 0, required: true },
   ]
   if (tab === "Transportation Records") return [
-    { key: "crop", label: "Crop", type: "select", options: CROP_DEFINITIONS.map((item) => item.name), required: true },
-    { key: "region", label: "Region", type: "select", options: REGIONS, required: true },
-    { key: "route", label: "Route", type: "select", options: ROUTES.map((item) => `${item.source} → ${item.destination}`), required: true },
+    { key: "crop", label: "Crop", type: "select", options: crops.map((item) => item.name), required: true },
+    { key: "region", label: "Region", type: "select", options: regions, required: true },
+    { key: "route", label: "Route", type: "select", options: routes.map((item) => `${item.source} → ${item.destination}`), required: true },
     { key: "vehicleId", label: "Vehicle ID", required: true },
     { key: "transitHours", label: "Transit duration (hours)", type: "number", min: 0, required: true },
     { key: "quantityReceivedKg", label: "Quantity received after transit (kg)", type: "number", min: 0, required: true },
   ]
   if (tab === "Shipments") return [
-    { key: "crop", label: "Crop", type: "select", options: CROP_DEFINITIONS.map((item) => item.name), required: true },
-    { key: "region", label: "Region", type: "select", options: REGIONS, required: true },
+    { key: "crop", label: "Crop", type: "select", options: crops.map((item) => item.name), required: true },
+    { key: "region", label: "Region", type: "select", options: regions, required: true },
     { key: "origin", label: "Origin", required: true },
     { key: "destination", label: "Destination", required: true },
     { key: "dispatchDate", label: "Dispatch date", type: "date", required: true },
@@ -71,8 +71,8 @@ function fieldsFor(tab: TabName): Field[] {
     { key: "status", label: "Status", type: "select", options: ["Delivered", "In Transit", "Delayed", "High Risk"], required: true },
   ]
   return [
-    { key: "crop", label: "Crop", type: "select", options: CROP_DEFINITIONS.map((item) => item.name), required: true },
-    { key: "region", label: "Region", type: "select", options: REGIONS, required: true },
+    { key: "crop", label: "Crop", type: "select", options: crops.map((item) => item.name), required: true },
+    { key: "region", label: "Region", type: "select", options: regions, required: true },
     { key: "stage", label: "Supply-chain stage", type: "select", options: ["Harvest / Collection", "Storage", "Transportation", "Delivery"], required: true },
     { key: "quantityLostKg", label: "Loss quantity (kg)", type: "number", min: 0, required: true },
     { key: "recordDate", label: "Record date", type: "date", required: true },
@@ -156,15 +156,15 @@ function toNumber(value: Record<string, string>, key: string, fallback: number) 
   return Number.isFinite(number) ? number : fallback
 }
 
-function newShipment(values: Record<string, string>, shipments: Shipment[], tab: TabName): Shipment {
+function newShipment(values: Record<string, string>, shipments: Shipment[], tab: TabName, facilities: typeof FACILITIES, routes: typeof ROUTES, regions: string[]): Shipment {
   const latest = [...shipments].sort((a, b) => b.id.localeCompare(a.id))[0]
   const nextNumber = Number(latest?.id.replace("SHP-", "") ?? 2400) + 1
   const qtyDispatched = Math.max(1, toNumber(values, "qtyDispatched", toNumber(values, "quantityHarvestedKg", toNumber(values, "quantityStoredKg", 18000))))
   let loss = Math.max(0, toNumber(values, "quantityLostKg", Math.round(qtyDispatched * 0.04)))
   if (values.qtyReceived !== undefined) loss = Math.max(0, qtyDispatched - toNumber(values, "qtyReceived", qtyDispatched))
-  const route = ROUTES.find((item) => `${item.source} → ${item.destination}` === values.route) ?? ROUTES[0]
-  const facility = FACILITIES.find((item) => item.name === values.facility) ?? FACILITIES[0]
-  const region = values.region || REGIONS[0]
+  const route = routes.find((item) => `${item.source} → ${item.destination}` === values.route) ?? routes[0]
+  const facility = facilities.find((item) => item.name === values.facility) ?? facilities[0]
+  const region = values.region || regions[0] || ""
   const stageLoss = { harvest: Math.round(loss * 0.2), storage: Math.round(loss * 0.35), transportation: Math.round(loss * 0.3), delivery: 0 }
   stageLoss.delivery = Math.max(0, loss - stageLoss.harvest - stageLoss.storage - stageLoss.transportation)
   if (tab === "Loss Records" && values.stage) {
@@ -178,18 +178,18 @@ function newShipment(values: Record<string, string>, shipments: Shipment[], tab:
     id: `SHP-${String(nextNumber).padStart(4, "0")}`,
     crop: values.crop || CROP_DEFINITIONS[0].name,
     region,
-    origin: values.origin || ROUTES.find((item) => item.id === route.id)?.source || "Ludhiana",
-    destination: values.destination || route.destination,
+    origin: values.origin || route?.source || "",
+    destination: values.destination || route?.destination || "",
     dispatchDate,
     expectedDate: values.expectedDate || dispatchDate,
     actualDate: null,
     qtyDispatched,
     qtyReceived: Math.max(0, qtyDispatched - loss),
     status,
-    facilityId: facility.id,
-    facility: facility.name,
-    routeId: route.id,
-    route: `${route.source} → ${route.destination}`,
+    facilityId: facility?.id ?? "",
+    facility: facility?.name ?? "Unassigned facility",
+    routeId: route?.id ?? "",
+    route: route ? `${route.source} → ${route.destination}` : `${values.origin ?? ""} → ${values.destination ?? ""}`,
     vehicleId: values.vehicleId || `VH-${String(510 + nextNumber % 90)}`,
     storageDays: Math.max(0, toNumber(values, "storageDays", 6)),
     transitHours: Math.max(0, toNumber(values, "transitHours", 14)),
@@ -197,7 +197,7 @@ function newShipment(values: Record<string, string>, shipments: Shipment[], tab:
   }
 }
 
-function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<string, string>, row: RecordRow): Shipment {
+function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<string, string>, row: RecordRow, facilities: typeof FACILITIES, routes: typeof ROUTES): Shipment {
   const next: Shipment = { ...shipment, stageLoss: { ...shipment.stageLoss } }
   if (values.crop) next.crop = values.crop
   if (values.region) next.region = values.region
@@ -208,7 +208,7 @@ function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<s
   }
   if (tab === "Storage Records") {
     if (values.facility) {
-      const facility = FACILITIES.find((item) => item.name === values.facility)
+      const facility = facilities.find((item) => item.name === values.facility)
       next.facility = values.facility
       if (facility) next.facilityId = facility.id
     }
@@ -216,7 +216,7 @@ function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<s
     next.stageLoss.storage = Math.max(0, Math.round(toNumber(values, "quantityLostKg", shipment.stageLoss.storage)))
   }
   if (tab === "Transportation Records") {
-    const route = ROUTES.find((item) => `${item.source} → ${item.destination}` === values.route)
+    const route = routes.find((item) => `${item.source} → ${item.destination}` === values.route)
     if (route) { next.route = `${route.source} → ${route.destination}`; next.routeId = route.id }
     next.vehicleId = values.vehicleId || shipment.vehicleId
     next.transitHours = Math.max(0, toNumber(values, "transitHours", shipment.transitHours))
@@ -260,14 +260,22 @@ function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<s
 
 function RecordDialog({
   state,
+  crops,
+  facilities,
+  routes,
+  regions,
   onClose,
   onSave,
 }: {
   state: EditorState
+  crops: CropDefinition[]
+  facilities: typeof FACILITIES
+  routes: typeof ROUTES
+  regions: string[]
   onClose: () => void
   onSave: (values: Record<string, string>) => void
 }) {
-  const fields = fieldsFor(state.tab)
+  const fields = fieldsFor(state.tab, crops, facilities, routes, regions)
   const initial = state.row ? Object.fromEntries(fields.map((field) => [field.key, String(state.row?.[field.key] ?? "")])) : {}
   const [values, setValues] = useState<Record<string, string>>(initial)
   const [error, setError] = useState("")
@@ -287,7 +295,7 @@ function RecordDialog({
             </label>)}
           </div>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="modal-footer"><p>Changes update the shared sample records and analytics.</p><div>{!readOnly && <button className="button-primary" type="submit"><Plus />{state.mode === "add" ? "Add record" : "Save changes"}</button>}<button className="button-quiet" type="button" onClick={onClose}>{readOnly ? "Close" : "Cancel"}</button></div></div>
+          <div className="modal-footer"><p>Changes update the selected record and related analytics.</p><div>{!readOnly && <button className="button-primary" type="submit"><Plus />{state.mode === "add" ? "Add record" : "Save changes"}</button>}<button className="button-quiet" type="button" onClick={onClose}>{readOnly ? "Close" : "Cancel"}</button></div></div>
         </form>
       </section>
     </div>
@@ -297,12 +305,20 @@ function RecordDialog({
 export function RecordsView({
   shipments,
   crops,
+  facilities,
+  routes,
+  regions,
+  dataMode,
   onChangeShipments,
   onChangeCrops,
   onNotify,
 }: {
   shipments: Shipment[]
   crops: CropDefinition[]
+  facilities: typeof FACILITIES
+  routes: typeof ROUTES
+  regions: string[]
+  dataMode: "loading" | "oracle" | "demo"
   onChangeShipments: (next: Shipment[]) => void
   onChangeCrops: (next: CropDefinition[]) => void
   onNotify: (message: string) => void
@@ -351,16 +367,16 @@ export function RecordsView({
         const oldName = String(editor.row.crop)
         const nextName = values.crop.trim()
         onChangeCrops(crops.map((crop) => crop.name === oldName ? { ...crop, name: nextName, category: values.category as CropDefinition["category"], season: values.season } : crop))
-        onChangeShipments(shipments.map((shipment) => shipment.crop === oldName ? { ...shipment, crop: nextName } : shipment))
+        if (dataMode !== "oracle") onChangeShipments(shipments.map((shipment) => shipment.crop === oldName ? { ...shipment, crop: nextName } : shipment))
         onNotify(`${nextName} was updated across linked records.`)
       }
     } else if (editor.mode === "add") {
-      onChangeShipments([...shipments, newShipment(values, shipments, editor.tab)])
+      onChangeShipments([...shipments, newShipment(values, shipments, editor.tab, facilities, routes, regions)])
       onNotify(`A new ${editor.tab.toLowerCase()} record was added.`)
     } else if (editor.row?.shipmentId) {
       const linked = shipments.find((shipment) => shipment.id === editor?.row?.shipmentId)
       if (linked) {
-        const updated = updateLinkedShipment(editor.tab, linked, values, editor.row)
+        const updated = updateLinkedShipment(editor.tab, linked, values, editor.row, facilities, routes)
         onChangeShipments(shipments.map((shipment) => shipment.id === updated.id ? updated : shipment))
         onNotify(`${editor.row.id} was updated. Related analytics refreshed.`)
       }
@@ -373,7 +389,7 @@ export function RecordsView({
     if (activeTab === "Crops") {
       const cropName = String(row.crop)
       onChangeCrops(crops.filter((crop) => crop.name !== cropName))
-      onChangeShipments(shipments.filter((shipment) => shipment.crop !== cropName))
+      if (dataMode !== "oracle") onChangeShipments(shipments.filter((shipment) => shipment.crop !== cropName))
     } else if (activeTab === "Loss Records" && row.shipmentId) {
       const shipment = shipments.find((item) => item.id === row.shipmentId)
       if (shipment) {
@@ -406,7 +422,7 @@ export function RecordsView({
           <label className="search-control"><Search /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search records..." aria-label="Search records" /></label>
           <div className="toolbar-filters">
             <label className="filter-select"><select value={cropFilter} onChange={(event) => { setCropFilter(event.target.value); setPage(1) }}><option>All crops</option>{crops.map((crop) => <option key={crop.id}>{crop.name}</option>)}</select><ChevronDown /></label>
-            <label className="filter-select"><select value={regionFilter} onChange={(event) => { setRegionFilter(event.target.value); setPage(1) }}><option>All regions</option>{REGIONS.map((region) => <option key={region}>{region}</option>)}</select><ChevronDown /></label>
+            <label className="filter-select"><select value={regionFilter} onChange={(event) => { setRegionFilter(event.target.value); setPage(1) }}><option>All regions</option>{regions.map((region) => <option key={region}>{region}</option>)}</select><ChevronDown /></label>
             <label className="filter-select"><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1) }}><option>All statuses</option><option>Delivered</option><option>In Transit</option><option>Delayed</option><option>High Risk</option><option>On time</option></select><ChevronDown /></label>
             <div className="date-filter-pair"><label><span className="sr-only">From date</span><input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1) }} /></label><span>to</span><label><span className="sr-only">To date</span><input type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1) }} /></label></div>
           </div>
@@ -420,7 +436,7 @@ export function RecordsView({
         </div>
         <div className="table-footer"><span>Showing <strong>{sortedRows.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, sortedRows.length)}</strong> of <strong>{sortedRows.length}</strong> records</span><div className="pagination"><button className="icon-button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft /></button><span>Page {page} of {pageCount}</span><button className="icon-button" aria-label="Next page" disabled={page >= pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}><ChevronRight /></button></div></div>
       </Card>
-      {editor && <RecordDialog key={`${editor.mode}-${editor.tab}-${editor.row?.id ?? "new"}`} state={editor} onClose={() => setEditor(null)} onSave={saveRecord} />}
+      {editor && <RecordDialog key={`${editor.mode}-${editor.tab}-${editor.row?.id ?? "new"}`} state={editor} crops={crops} facilities={facilities} routes={routes} regions={regions} onClose={() => setEditor(null)} onSave={saveRecord} />}
     </div>
   )
 }

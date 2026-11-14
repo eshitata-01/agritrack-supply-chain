@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   images: {
     unoptimized: true,
   },

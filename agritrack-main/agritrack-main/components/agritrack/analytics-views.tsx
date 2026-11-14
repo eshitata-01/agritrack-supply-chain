@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YA
 import { ArrowDownRight, ArrowUpRight, Search, Warehouse, Route, PackageOpen, Percent } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
-import { FACILITIES, REGIONS, formatDate, formatKg, formatTonnes, getCropTotals, getFacilityTotals, getLossPercentage, getLossQuantity, getRegionTotals, getRouteTotals, type Shipment } from "@/lib/agritrack-data"
+import { REGIONS, formatDate, formatKg, formatTonnes, getCropTotals, getFacilityTotals, getLossPercentage, getLossQuantity, getRegionTotals, getRouteTotals, type Shipment } from "@/lib/agritrack-data"
 
 type FilterState = { crop: string; region: string; from: string; to: string; query: string }
 const emptyFilters: FilterState = { crop: "All crops", region: "All regions", from: "", to: "", query: "" }
@@ -53,7 +53,7 @@ export function CropAnalyticsView({ shipments, crops }: { shipments: Shipment[];
   const avgLoss = collected ? (lost / collected) * 100 : 0
   const topCrop = cropRows[0]
   return <div className="page-stack">
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> CROP PERFORMANCE</div><h1>Crop analytics</h1><p>Compare harvested quantities and identify crops with the greatest recorded loss.</p></div><span className="data-source-badge"><i /> Live sample data</span></div>
+    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> CROP PERFORMANCE</div><h1>Crop analytics</h1><p>Compare harvested quantities and identify crops with the greatest recorded loss.</p></div><span className="data-source-badge"><i /> Current data</span></div>
     <FiltersBar filters={filters} setFilters={setFilters} crops={crops} />
     <section className="analytics-stat-grid">
       <StatTile label="Crops analyzed" value={String(new Set(filtered.map((item) => item.crop)).size)} note="Crop types in this selection" icon={PackageOpen} />
@@ -77,7 +77,7 @@ export function StorageMonitoringView({ shipments, crops }: { shipments: Shipmen
   const top = facilities[0]
   const scatter = filtered.map((shipment) => ({ duration: shipment.storageDays, lossPct: shipment.qtyDispatched ? (shipment.stageLoss.storage / shipment.qtyDispatched) * 100 : 0, crop: shipment.crop, facility: shipment.facility }))
   return <div className="page-stack">
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> POST-HARVEST CONDITIONS</div><h1>Storage monitoring</h1><p>Review facility performance, storage duration, and recorded deterioration.</p></div><span className="data-source-badge"><i /> {FACILITIES.length} facilities</span></div>
+    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> POST-HARVEST CONDITIONS</div><h1>Storage monitoring</h1><p>Review facility performance, storage duration, and recorded deterioration.</p></div><span className="data-source-badge"><i /> {facilities.length} facilities with records</span></div>
     <FiltersBar filters={filters} setFilters={setFilters} crops={crops} />
     <section className="analytics-stat-grid">
       <StatTile label="Active facilities" value={String(facilities.length)} note="With selected storage records" icon={Warehouse} />

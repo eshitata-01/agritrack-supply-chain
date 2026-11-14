@@ -1,6 +1,6 @@
-import oracledb from "oracledb";
+import oracledb, { type Pool } from "oracledb";
 
-let poolPromise: Promise<oracledb.Pool> | null = null;
+let poolPromise: Promise<Pool> | null = null;
 
 export function getOraclePool() {
   if (!poolPromise) {
@@ -15,9 +15,19 @@ export function getOraclePool() {
       poolMin: 1,
       poolMax: 5,
       poolIncrement: 1,
+    }).catch((error) => {
+      poolPromise = null;
+      throw error;
     });
   }
   return poolPromise;
+}
+
+export async function closeOraclePool() {
+  if (!poolPromise) return;
+  const pool = await poolPromise;
+  poolPromise = null;
+  await pool.close(10);
 }
 
 export async function runOracleQuery<T = Record<string, unknown>>(
@@ -29,6 +39,23 @@ export async function runOracleQuery<T = Record<string, unknown>>(
   try {
     const result = await connection.execute<T>(sql, binds, {
       outFormat: oracledb.OUT_FORMAT_OBJECT,
+    });
+    return result.rows ?? [];
+  } finally {
+    await connection.close();
+  }
+}
+
+export async function runOracleMutation<T = Record<string, unknown>>(
+  sql: string,
+  binds: Record<string, unknown> = {},
+) {
+  const pool = await getOraclePool();
+  const connection = await pool.getConnection();
+  try {
+    const result = await connection.execute<T>(sql, binds, {
+      outFormat: oracledb.OUT_FORMAT_OBJECT,
+      autoCommit: true,
     });
     return result.rows ?? [];
   } finally {
