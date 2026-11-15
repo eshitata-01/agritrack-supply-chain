@@ -179,7 +179,7 @@ export function AgriTrackApp() {
   }
 
   let content
-  if (activePage === "Dashboard") content = <DashboardView shipments={shipments} crops={cropNames} onOpenShipment={setSelectedShipment} onNavigate={navigate} />
+  if (activePage === "Dashboard") content = <DashboardView shipments={shipments} crops={cropNames} dataMode={dataMode} onOpenShipment={setSelectedShipment} onNavigate={navigate} />
   else if (activePage === "Supply Chain Records") content = <RecordsView shipments={shipments} crops={cropCatalog} facilities={facilityCatalog} routes={routeCatalog} regions={regionCatalog} dataMode={dataMode} onChangeShipments={applyShipments} onChangeCrops={applyCrops} onNotify={notify} />
   else if (activePage === "Crop Analytics") content = <CropAnalyticsView shipments={shipments} crops={cropNames} regions={regionCatalog} />
   else if (activePage === "Storage Monitoring") content = <StorageMonitoringView shipments={shipments} crops={cropNames} regions={regionCatalog} />

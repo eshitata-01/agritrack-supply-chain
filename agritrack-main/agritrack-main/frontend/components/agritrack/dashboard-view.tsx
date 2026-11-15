@@ -1,7 +1,7 @@
 "use client"
 
 import { ArrowDownRight, ArrowUpRight, Boxes, CircleAlert, PackageCheck, PackageMinus, Percent, Warehouse } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { DashboardCharts } from "@/components/agritrack/dashboard-charts"
 import {
@@ -22,6 +22,7 @@ import {
 type Props = {
   shipments: Shipment[]
   crops: string[]
+  dataMode: "loading" | "oracle" | "error"
   onOpenShipment: (shipment: Shipment) => void
   onNavigate: (page: string) => void
 }
@@ -50,6 +51,7 @@ function KpiCard({
   change,
   icon: Icon,
   tone = "green",
+  available = true,
 }: {
   label: string
   value: string
@@ -57,6 +59,7 @@ function KpiCard({
   change: number
   icon: typeof PackageCheck
   tone?: "green" | "amber" | "red" | "slate"
+  available?: boolean
 }) {
   const positive = tone === "red" ? change < 0 : change >= 0
   return (
@@ -64,11 +67,9 @@ function KpiCard({
       <CardContent className="kpi-content">
         <div className={`kpi-icon ${tone}`}><Icon aria-hidden="true" /></div>
         <div className="kpi-label-row"><span className="kpi-label">{label}</span><span className="kpi-menu-dot" aria-hidden="true">•••</span></div>
-        <div className="kpi-value">{value}<span>{unit}</span></div>
+        <div className="kpi-value">{available ? value : "—"}<span>{available ? unit : ""}</span></div>
         <div className={`kpi-change ${positive ? "change-good" : "change-bad"}`}>
-          {change >= 0 ? <ArrowUpRight aria-hidden="true" /> : <ArrowDownRight aria-hidden="true" />}
-          <strong>{Math.abs(change).toFixed(1)}%</strong>
-          <span>vs earlier records</span>
+          {available ? <>{change >= 0 ? <ArrowUpRight aria-hidden="true" /> : <ArrowDownRight aria-hidden="true" />}<strong>{Math.abs(change).toFixed(1)}%</strong><span>vs earlier records</span></> : <span>Awaiting Oracle data</span>}
         </div>
       </CardContent>
     </Card>
@@ -85,7 +86,10 @@ function InsightRow({ icon, title, name, detail, tone }: { icon: string; title: 
   )
 }
 
-export function DashboardView({ shipments, crops, onOpenShipment, onNavigate }: Props) {
+export function DashboardView({ shipments, crops, dataMode, onOpenShipment, onNavigate }: Props) {
+  const [clientMounted, setClientMounted] = useState(false)
+  useEffect(() => setClientMounted(true), [])
+  const dataAvailable = clientMounted && dataMode === "oracle"
   const [period, setPeriod] = useState<Period>("12 months")
   const [cropFilter, setCropFilter] = useState("All crops")
 
@@ -156,12 +160,12 @@ export function DashboardView({ shipments, crops, onOpenShipment, onNavigate }: 
       </div>
 
       <section className="kpi-grid" aria-label="Supply chain key metrics">
-        <KpiCard label="Produce collected" value={formatTonnes(metrics.collected)} unit=" t" change={changes.collected} icon={Boxes} tone="green" />
-        <KpiCard label="Produce lost" value={formatTonnes(metrics.lost)} unit=" t" change={changes.lost} icon={PackageMinus} tone="amber" />
-        <KpiCard label="Overall loss rate" value={percentLoss.toFixed(1)} unit="%" change={changes.lossPct} icon={Percent} tone="red" />
-        <KpiCard label="Total shipments" value={metrics.shipments.toLocaleString("en-IN")} change={changes.shipments} icon={PackageCheck} tone="slate" />
-        <KpiCard label="Storage facilities" value={String(activeFacilities)} change={changes.facilities} icon={Warehouse} tone="green" />
-        <KpiCard label="High-risk shipments" value={String(filtered.filter((shipment) => getLossPercentage(shipment) >= 5).length)} change={changes.highRisk} icon={CircleAlert} tone="red" />
+        <KpiCard label="Produce collected" value={formatTonnes(metrics.collected)} unit=" t" change={changes.collected} icon={Boxes} tone="green" available={dataAvailable} />
+        <KpiCard label="Produce lost" value={formatTonnes(metrics.lost)} unit=" t" change={changes.lost} icon={PackageMinus} tone="amber" available={dataAvailable} />
+        <KpiCard label="Overall loss rate" value={percentLoss.toFixed(1)} unit="%" change={changes.lossPct} icon={Percent} tone="red" available={dataAvailable} />
+        <KpiCard label="Total shipments" value={metrics.shipments.toLocaleString("en-IN")} change={changes.shipments} icon={PackageCheck} tone="slate" available={dataAvailable} />
+        <KpiCard label="Storage facilities" value={String(activeFacilities)} change={changes.facilities} icon={Warehouse} tone="green" available={dataAvailable} />
+        <KpiCard label="High-risk shipments" value={String(filtered.filter((shipment) => getLossPercentage(shipment) >= 5).length)} change={changes.highRisk} icon={CircleAlert} tone="red" available={dataAvailable} />
       </section>
 
       <section className="chart-grid" aria-label="Loss analysis charts">

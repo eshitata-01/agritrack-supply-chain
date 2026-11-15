@@ -24,6 +24,9 @@ export function toPublicDatabaseError(error: unknown): PublicDatabaseError {
   if (code === "ORA-12170" || code === "NJS-511") {
     return { code, message: "The Oracle connection timed out. Check the listener address, firewall, and database startup state." };
   }
+  if (code === "NJS-040") {
+    return { code, message: "The Oracle connection pool timed out waiting for a free connection. The read request did not delete database records. Restore listener access, then restart the Next.js server to clear stale pooled connections." };
+  }
   if (code.startsWith("ORA-") || code.startsWith("NJS-") || code.startsWith("DPI-")) {
     return { code, message: `Oracle connection failed (${code}). Check the database service, account permissions, and Oracle driver configuration.` };
   }
