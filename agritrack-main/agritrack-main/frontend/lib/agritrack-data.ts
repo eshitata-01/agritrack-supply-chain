@@ -35,103 +35,6 @@ export type CropDefinition = {
 export type RecordValue = string | number | boolean | null | undefined
 export type RecordRow = Record<string, RecordValue> & { id: string; shipmentId?: string }
 
-export const CROP_DEFINITIONS: CropDefinition[] = [
-  { id: "CR-001", name: "Rice", category: "Grain", season: "Kharif" },
-  { id: "CR-002", name: "Wheat", category: "Grain", season: "Rabi" },
-  { id: "CR-003", name: "Tomatoes", category: "Vegetable", season: "Summer" },
-  { id: "CR-004", name: "Potatoes", category: "Vegetable", season: "Rabi" },
-  { id: "CR-005", name: "Onions", category: "Vegetable", season: "Rabi" },
-  { id: "CR-006", name: "Mangoes", category: "Fruit", season: "Summer" },
-]
-
-export const REGIONS = ["Punjab", "Maharashtra", "Karnataka", "Uttar Pradesh", "West Bengal"]
-
-export const FACILITIES = [
-  { id: "ST-101", name: "Green Valley Cold Store", location: "Ludhiana, Punjab" },
-  { id: "ST-102", name: "Deccan Fresh Hub", location: "Nashik, Maharashtra" },
-  { id: "ST-103", name: "Mysuru Agri Depot", location: "Mysuru, Karnataka" },
-  { id: "ST-104", name: "Ganga Grain Terminal", location: "Kanpur, Uttar Pradesh" },
-  { id: "ST-105", name: "Bengal Produce Centre", location: "Siliguri, West Bengal" },
-]
-
-export const ROUTES = [
-  { id: "RT-201", source: "Ludhiana", destination: "Delhi" },
-  { id: "RT-202", source: "Nashik", destination: "Mumbai" },
-  { id: "RT-203", source: "Mysuru", destination: "Bengaluru" },
-  { id: "RT-204", source: "Kanpur", destination: "Lucknow" },
-  { id: "RT-205", source: "Siliguri", destination: "Kolkata" },
-  { id: "RT-206", source: "Ludhiana", destination: "Jaipur" },
-  { id: "RT-207", source: "Nashik", destination: "Pune" },
-  { id: "RT-208", source: "Mysuru", destination: "Chennai" },
-]
-
-const MONTHS = ["Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov"]
-const QUANTITIES = [18400, 12600, 22800, 15400, 19700, 13200, 24600, 16800, 21800, 14300, 17600, 23900, 14900, 20500, 16200, 23100, 18700, 12800, 25200, 17100, 19300, 22200, 13800, 21400]
-const LOSS_RATES = [2.1, 4.8, 3.2, 6.7, 2.9, 5.4, 7.2, 3.8, 4.1, 8.6, 2.5, 5.9, 3.4, 6.2, 4.6, 7.8, 2.7, 5.2, 9.1, 3.1, 4.4, 6.5, 2.3, 7.1]
-const STATUS_SEQUENCE: ShipmentStatus[] = ["Delivered", "Delivered", "In Transit", "Delayed", "Delivered", "High Risk", "Delivered", "In Transit", "Delivered", "High Risk", "Delayed", "Delivered", "In Transit", "Delivered", "High Risk", "Delivered", "Delayed", "In Transit", "High Risk", "Delivered", "Delivered", "Delayed", "In Transit", "High Risk"]
-const REGIONS_FOR_SHIPMENTS = ["Punjab", "Maharashtra", "Karnataka", "Uttar Pradesh", "West Bengal"]
-const ORIGINS = ["Amritsar", "Nashik", "Mysuru", "Kanpur", "Siliguri"]
-const DESTINATIONS = ["Delhi", "Mumbai", "Bengaluru", "Lucknow", "Kolkata"]
-
-function dateString(year: number, month: number, day: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-}
-
-function getStageLosses(totalLoss: number, seed: number): StageLoss {
-  const harvest = Math.round(totalLoss * (0.16 + (seed % 3) * 0.025))
-  const storage = Math.round(totalLoss * (0.31 + (seed % 4) * 0.018))
-  const transportation = Math.round(totalLoss * (0.27 + (seed % 2) * 0.04))
-  return {
-    harvest,
-    storage,
-    transportation,
-    delivery: Math.max(0, totalLoss - harvest - storage - transportation),
-  }
-}
-
-export function createSeedShipments(): Shipment[] {
-  return QUANTITIES.map((qtyDispatched, index) => {
-    const monthIndex = Math.floor(index / 2)
-    const month = (11 + monthIndex) % 12
-    const year = monthIndex === 0 ? 2025 : 2026
-    const day = index % 2 === 0 ? 5 : 18
-    const crop = CROP_DEFINITIONS[(index * 5 + Math.floor(index / 3)) % CROP_DEFINITIONS.length].name
-    const regionIndex = index % REGIONS_FOR_SHIPMENTS.length
-    const facility = FACILITIES[(index * 3 + 1) % FACILITIES.length]
-    const route = ROUTES[(index * 5 + Math.floor(index / 4)) % ROUTES.length]
-    const loss = Math.round((qtyDispatched * LOSS_RATES[index]) / 100)
-    const status = LOSS_RATES[index] >= 7 ? "High Risk" : STATUS_SEQUENCE[index]
-    const dispatchDate = dateString(year, month, day)
-    const expectedDate = dateString(year, month, Math.min(day + 5, 28))
-    const delivered = status === "Delivered" || status === "Delayed"
-    const actualDate = delivered
-      ? dateString(year, month, Math.min(day + (status === "Delayed" ? 8 : 4), 28))
-      : null
-
-    return {
-      id: `SHP-${String(2401 + index).padStart(4, "0")}`,
-      crop,
-      region: REGIONS_FOR_SHIPMENTS[regionIndex],
-      origin: ORIGINS[regionIndex],
-      destination: DESTINATIONS[regionIndex],
-      dispatchDate,
-      expectedDate,
-      actualDate,
-      qtyDispatched,
-      qtyReceived: qtyDispatched - loss,
-      status,
-      facilityId: facility.id,
-      facility: facility.name,
-      routeId: route.id,
-      route: `${route.source} → ${route.destination}`,
-      vehicleId: `VH-${String(510 + (index * 7) % 90)}`,
-      storageDays: 2 + ((index * 3) % 17),
-      transitHours: 6 + ((index * 11) % 39),
-      stageLoss: getStageLosses(loss, index),
-    }
-  })
-}
-
 export function getLossQuantity(shipment: Shipment) {
   return Math.max(0, shipment.qtyDispatched - shipment.qtyReceived)
 }
@@ -241,7 +144,7 @@ export function getRegionTotals(shipments: Shipment[]) {
 export function getFacilityTotals(shipments: Shipment[]) {
   const grouped = new Map<string, { facilityId: string; facility: string; location: string; region: string; crop: string; quantityStoredKg: number; lossKg: number; storageDays: number; records: number }>()
   for (const shipment of shipments) {
-    const facility = FACILITIES.find((item) => item.id === shipment.facilityId)
+    const facility = { location: shipment.region }
     const item = grouped.get(shipment.facilityId) ?? {
       facilityId: shipment.facilityId,
       facility: shipment.facility,

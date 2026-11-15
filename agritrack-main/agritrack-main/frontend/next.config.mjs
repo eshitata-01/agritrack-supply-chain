@@ -1,6 +1,16 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const frontendDir = path.dirname(fileURLToPath(import.meta.url))
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  agentRules: false,
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  outputFileTracingRoot: path.resolve(frontendDir, '..'),
+  outputFileTracingIncludes: {
+    '/api/sql-insights/[queryId]': ['../database/queries/*.sql'],
+  },
   images: {
     unoptimized: true,
   },

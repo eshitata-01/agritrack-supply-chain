@@ -4,10 +4,6 @@ import { useMemo, useState } from "react"
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Search, Trash2, X } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
-  CROP_DEFINITIONS,
-  FACILITIES,
-  REGIONS,
-  ROUTES,
   formatDate,
   formatKg,
   getLossPercentage,
@@ -20,6 +16,7 @@ import {
   type Shipment,
   type StageName,
 } from "@/lib/agritrack-data"
+import type { FacilityRecord, RouteRecord } from "@/services/api"
 
 type TabName = "Crops" | "Harvest Records" | "Storage Records" | "Transportation Records" | "Shipments" | "Loss Records"
 type EditorState = { mode: "add" | "edit" | "view"; tab: TabName; row?: RecordRow }
@@ -32,7 +29,7 @@ function titleCase(value: string) {
   return value.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())
 }
 
-function fieldsFor(tab: TabName, crops: CropDefinition[], facilities: typeof FACILITIES, routes: typeof ROUTES, regions: string[]): Field[] {
+function fieldsFor(tab: TabName, crops: CropDefinition[], facilities: FacilityRecord[], routes: RouteRecord[], regions: string[]): Field[] {
   if (tab === "Crops") return [
     { key: "crop", label: "Crop name", required: true },
     { key: "category", label: "Category", type: "select", options: ["Grain", "Vegetable", "Fruit"], required: true },
@@ -156,7 +153,7 @@ function toNumber(value: Record<string, string>, key: string, fallback: number) 
   return Number.isFinite(number) ? number : fallback
 }
 
-function newShipment(values: Record<string, string>, shipments: Shipment[], tab: TabName, facilities: typeof FACILITIES, routes: typeof ROUTES, regions: string[]): Shipment {
+function newShipment(values: Record<string, string>, shipments: Shipment[], tab: TabName, facilities: FacilityRecord[], routes: RouteRecord[], regions: string[]): Shipment {
   const latest = [...shipments].sort((a, b) => b.id.localeCompare(a.id))[0]
   const nextNumber = Number(latest?.id.replace("SHP-", "") ?? 2400) + 1
   const qtyDispatched = Math.max(1, toNumber(values, "qtyDispatched", toNumber(values, "quantityHarvestedKg", toNumber(values, "quantityStoredKg", 18000))))
@@ -176,7 +173,7 @@ function newShipment(values: Record<string, string>, shipments: Shipment[], tab:
   const status = (values.status || "In Transit") as Shipment["status"]
   return {
     id: `SHP-${String(nextNumber).padStart(4, "0")}`,
-    crop: values.crop || CROP_DEFINITIONS[0].name,
+    crop: values.crop || "",
     region,
     origin: values.origin || route?.source || "",
     destination: values.destination || route?.destination || "",
@@ -197,7 +194,7 @@ function newShipment(values: Record<string, string>, shipments: Shipment[], tab:
   }
 }
 
-function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<string, string>, row: RecordRow, facilities: typeof FACILITIES, routes: typeof ROUTES): Shipment {
+function updateLinkedShipment(tab: TabName, shipment: Shipment, values: Record<string, string>, row: RecordRow, facilities: FacilityRecord[], routes: RouteRecord[]): Shipment {
   const next: Shipment = { ...shipment, stageLoss: { ...shipment.stageLoss } }
   if (values.crop) next.crop = values.crop
   if (values.region) next.region = values.region
@@ -269,8 +266,8 @@ function RecordDialog({
 }: {
   state: EditorState
   crops: CropDefinition[]
-  facilities: typeof FACILITIES
-  routes: typeof ROUTES
+  facilities: FacilityRecord[]
+  routes: RouteRecord[]
   regions: string[]
   onClose: () => void
   onSave: (values: Record<string, string>) => void
@@ -315,10 +312,10 @@ export function RecordsView({
 }: {
   shipments: Shipment[]
   crops: CropDefinition[]
-  facilities: typeof FACILITIES
-  routes: typeof ROUTES
+  facilities: FacilityRecord[]
+  routes: RouteRecord[]
   regions: string[]
-  dataMode: "loading" | "oracle" | "demo"
+  dataMode: "loading" | "oracle" | "error"
   onChangeShipments: (next: Shipment[]) => void
   onChangeCrops: (next: CropDefinition[]) => void
   onNotify: (message: string) => void
@@ -385,7 +382,7 @@ export function RecordsView({
   }
 
   function deleteRecord(row: RecordRow) {
-    if (!window.confirm(`Delete ${row.id}? This change will update linked sample analytics.`)) return
+    if (!window.confirm(`Delete ${row.id}? This change will update linked Oracle records and analytics.`)) return
     if (activeTab === "Crops") {
       const cropName = String(row.crop)
       onChangeCrops(crops.filter((crop) => crop.name !== cropName))

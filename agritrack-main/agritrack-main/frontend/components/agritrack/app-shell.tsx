@@ -1,13 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Activity, Bell, ChevronDown, ChevronLeft, CircleHelp, Code2, Database, FileBarChart2, LayoutDashboard, Leaf, Menu, PackageSearch, Search, ShieldAlert, Sprout, Truck, Warehouse, X } from "lucide-react"
 import { DashboardView } from "@/components/agritrack/dashboard-view"
 import { CropAnalyticsView, StorageMonitoringView, TransportationView } from "@/components/agritrack/analytics-views"
 import { RecordsView } from "@/components/agritrack/records-view"
 import { LossDetectionView, ReportsView, SqlInsightsView } from "@/components/agritrack/insight-views"
 import { ShipmentDetailDialog, ShipmentTrackingView } from "@/components/agritrack/shipment-tracking-view"
-import { CROP_DEFINITIONS, FACILITIES, REGIONS, ROUTES, createSeedShipments, getLossPercentage, getShipmentStatus, type CropDefinition, type Shipment } from "@/lib/agritrack-data"
+import { getLossPercentage, getShipmentStatus, type CropDefinition, type Shipment } from "@/lib/agritrack-data"
+import { ApiError, createRecord, deleteRecord, getAgriTrackData, updateRecord, type FacilityRecord, type RouteRecord } from "@/services/api"
 
 type NavItem = { label: string; icon: typeof LayoutDashboard; badge?: string }
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
@@ -54,12 +55,13 @@ function GlobalSearch({ shipments, value, onValue, onSelect }: { shipments: Ship
 }
 
 export function AgriTrackApp() {
-  const [shipments, setShipments] = useState<Shipment[]>(createSeedShipments)
-  const [cropCatalog, setCropCatalog] = useState<CropDefinition[]>(CROP_DEFINITIONS)
-  const [facilityCatalog, setFacilityCatalog] = useState(FACILITIES)
-  const [routeCatalog, setRouteCatalog] = useState(ROUTES)
-  const [regionCatalog, setRegionCatalog] = useState(REGIONS)
-  const [dataMode, setDataMode] = useState<"loading" | "oracle" | "demo">("loading")
+  const [shipments, setShipments] = useState<Shipment[]>([])
+  const [cropCatalog, setCropCatalog] = useState<CropDefinition[]>([])
+  const [facilityCatalog, setFacilityCatalog] = useState<FacilityRecord[]>([])
+  const [routeCatalog, setRouteCatalog] = useState<RouteRecord[]>([])
+  const [regionCatalog, setRegionCatalog] = useState<string[]>([])
+  const [dataMode, setDataMode] = useState<"loading" | "oracle" | "error">("loading")
+  const [dataError, setDataError] = useState("")
   const [activePage, setActivePage] = useState("Dashboard")
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
   const [collapsed, setCollapsed] = useState(false)
@@ -73,22 +75,29 @@ export function AgriTrackApp() {
   const highRisk = shipments.filter((item) => getLossPercentage(item) >= 5)
   const delayed = shipments.filter((item) => item.status === "Delayed")
 
-  useEffect(() => {
-    let active = true
-    fetch("/api/agritrack", { cache: "no-store" }).then(async (response) => {
-      if (!response.ok) throw new Error("Data service unavailable")
-      return response.json()
-    }).then((data: { mode: "oracle" | "demo"; shipments: Shipment[]; crops: CropDefinition[]; facilities: typeof FACILITIES; routes: typeof ROUTES; regions: string[] }) => {
-      if (!active) return
+  const loadData = useCallback(async () => {
+    setDataMode("loading")
+    setDataError("")
+    try {
+      const data = await getAgriTrackData()
       setShipments(data.shipments)
       setCropCatalog(data.crops)
       setFacilityCatalog(data.facilities)
       setRouteCatalog(data.routes)
       setRegionCatalog(data.regions)
-      setDataMode(data.mode)
-    }).catch(() => { if (active) setDataMode("demo") })
-    return () => { active = false }
+      setDataMode("oracle")
+    } catch (error) {
+      setShipments([])
+      setCropCatalog([])
+      setFacilityCatalog([])
+      setRouteCatalog([])
+      setRegionCatalog([])
+      setDataMode("error")
+      setDataError(error instanceof ApiError ? error.message : "The Oracle API could not load dashboard data.")
+    }
   }, [])
+
+  useEffect(() => { void loadData() }, [loadData])
 
   useEffect(() => {
     if (!toastMessage) return
@@ -118,9 +127,7 @@ export function AgriTrackApp() {
   }
 
   async function refreshOracleData() {
-    const response = await fetch("/api/agritrack", { cache: "no-store" })
-    if (!response.ok) throw new Error("Could not reload Oracle records.")
-    const data = await response.json()
+    const data = await getAgriTrackData()
     setShipments(data.shipments)
     setCropCatalog(data.crops)
     setFacilityCatalog(data.facilities)
@@ -129,21 +136,16 @@ export function AgriTrackApp() {
   }
 
   async function persistRecord(resource: "shipment" | "crop", record: Record<string, unknown>, isNew: boolean, isDelete = false, syncLossEvents = false) {
-    if (dataMode !== "oracle") return
+    if (dataMode !== "oracle") throw new Error("Oracle is not connected; record changes were not saved.")
     const id = Number(String(record.id ?? "").replace(/^[A-Z]+-/, ""))
-    const response = isDelete
-      ? await fetch(`/api/agritrack?resource=${resource}&id=${id}`, { method: "DELETE" })
-      : await fetch("/api/agritrack", { method: isNew ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isNew ? { resource, ...record } : { resource, id, record: { ...record, syncLossEvents } }) })
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({}))
-      throw new Error(result.error ?? "Oracle rejected the record change.")
-    }
+    if (isDelete) await deleteRecord(resource, id)
+    else if (isNew) await createRecord(resource, record)
+    else await updateRecord(resource, id, { ...record, syncLossEvents })
   }
 
   async function applyShipments(next: Shipment[]) {
+    if (dataMode !== "oracle") { notify(dataError || "Oracle is not connected; no changes were saved."); return }
     const previous = shipments
-    setShipments(next)
-    if (dataMode !== "oracle") return
     try {
       for (const item of previous) if (!next.some((candidate) => candidate.id === item.id)) await persistRecord("shipment", item as unknown as Record<string, unknown>, false, true)
       for (const item of next) {
@@ -153,15 +155,14 @@ export function AgriTrackApp() {
       await refreshOracleData()
       notify("Oracle records saved. Analytics refreshed.")
     } catch (error) {
-      await refreshOracleData()
+      await loadData()
       notify(error instanceof Error ? error.message : "Oracle save failed.")
     }
   }
 
   async function applyCrops(next: CropDefinition[]) {
+    if (dataMode !== "oracle") { notify(dataError || "Oracle is not connected; no changes were saved."); return }
     const previous = cropCatalog
-    setCropCatalog(next)
-    if (dataMode !== "oracle") return
     try {
       for (const item of previous) if (!next.some((candidate) => candidate.id === item.id)) await persistRecord("crop", { ...item, name: item.name }, false, true)
       for (const item of next) {
@@ -172,7 +173,7 @@ export function AgriTrackApp() {
       await refreshOracleData()
       notify("Crop catalog saved to Oracle.")
     } catch (error) {
-      await refreshOracleData()
+      await loadData()
       notify(error instanceof Error ? error.message : "Oracle save failed.")
     }
   }
@@ -180,25 +181,29 @@ export function AgriTrackApp() {
   let content
   if (activePage === "Dashboard") content = <DashboardView shipments={shipments} crops={cropNames} onOpenShipment={setSelectedShipment} onNavigate={navigate} />
   else if (activePage === "Supply Chain Records") content = <RecordsView shipments={shipments} crops={cropCatalog} facilities={facilityCatalog} routes={routeCatalog} regions={regionCatalog} dataMode={dataMode} onChangeShipments={applyShipments} onChangeCrops={applyCrops} onNotify={notify} />
-  else if (activePage === "Crop Analytics") content = <CropAnalyticsView shipments={shipments} crops={cropNames} />
-  else if (activePage === "Storage Monitoring") content = <StorageMonitoringView shipments={shipments} crops={cropNames} />
-  else if (activePage === "Transportation") content = <TransportationView shipments={shipments} crops={cropNames} />
+  else if (activePage === "Crop Analytics") content = <CropAnalyticsView shipments={shipments} crops={cropNames} regions={regionCatalog} />
+  else if (activePage === "Storage Monitoring") content = <StorageMonitoringView shipments={shipments} crops={cropNames} regions={regionCatalog} />
+  else if (activePage === "Transportation") content = <TransportationView shipments={shipments} crops={cropNames} regions={regionCatalog} />
   else if (activePage === "Shipment Tracking") content = <ShipmentTrackingView shipments={shipments} onSelect={setSelectedShipment} />
-  else if (activePage === "Loss Detection") content = <LossDetectionView shipments={shipments} crops={cropNames} />
+  else if (activePage === "Loss Detection") content = <LossDetectionView shipments={shipments} crops={cropNames} regions={regionCatalog} />
   else if (activePage === "Reports") content = <ReportsView shipments={shipments} crops={cropNames} dataMode={dataMode} />
-  else content = <SqlInsightsView shipments={shipments} />
+  else content = <SqlInsightsView />
 
   const today = new Intl.DateTimeFormat("en", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(new Date())
 
   return <div className="agritrack-app">
     <Sidebar activePage={activePage} onNavigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} closeMobile={() => setMobileOpen(false)} />
     <div className={`app-main ${collapsed ? "sidebar-collapsed" : ""}`}>
-      <header className="topbar"><button className="mobile-menu-button icon-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu /></button><div className="topbar-breadcrumb"><span>AgriTrack</span><span className="breadcrumb-slash">/</span><strong>{activePage}</strong></div><span className={`data-mode-indicator ${dataMode}`}>{dataMode === "loading" ? "Connecting" : dataMode === "oracle" ? "Oracle live" : "Demo data"}</span><GlobalSearch shipments={shipments} value={search} onValue={setSearch} onSelect={(shipment) => { navigate("Shipment Tracking"); setSelectedShipment(shipment) }} /><div className="topbar-actions"><span className="topbar-date">{today}</span><div className="topbar-popover-wrap"><button className={`icon-button topbar-icon ${notificationOpen ? "selected" : ""}`} aria-label={`Notifications, ${highRisk.length + delayed.length} items`} aria-expanded={notificationOpen} onClick={() => { setNotificationOpen((open) => !open); setProfileOpen(false) }}><Bell /><i className="notification-dot" /></button>{notificationOpen && <div className="topbar-popover notification-popover"><div className="popover-heading"><strong>Operations alerts</strong><span>{highRisk.length + delayed.length} to review</span></div>{highRisk.slice(0, 3).map((shipment) => <button key={`risk-${shipment.id}`} onClick={() => { setSelectedShipment(shipment); setNotificationOpen(false) }}><span className="popover-alert-icon red"><ShieldAlert /></span><span><strong>{shipment.id} · {shipment.crop}</strong><small>{getLossPercentage(shipment).toFixed(1)}% recorded loss · {shipment.region}</small></span></button>)}{delayed.slice(0, 2).map((shipment) => <button key={`delay-${shipment.id}`} onClick={() => { setSelectedShipment(shipment); setNotificationOpen(false) }}><span className="popover-alert-icon amber"><Activity /></span><span><strong>{shipment.id} is delayed</strong><small>{shipment.origin} to {shipment.destination}</small></span></button>)}{!highRisk.length && !delayed.length && <p className="popover-empty">All shipments look on track.</p>}<button className="popover-footer-link" onClick={() => navigate("Loss Detection")}>Open loss detection <span>→</span></button></div>}</div><div className="topbar-popover-wrap"><button className="profile-top-button" onClick={() => { setProfileOpen((open) => !open); setNotificationOpen(false) }} aria-expanded={profileOpen}><span className="user-avatar small-avatar">AK</span><ChevronDown aria-hidden="true" /></button>{profileOpen && <div className="topbar-popover profile-popover"><div className="profile-popover-header"><span className="user-avatar">AK</span><div><strong>Arjun Kumar</strong><small>Navami Ventures</small></div></div><button onClick={() => { setProfileOpen(false); setHelpOpen(true) }}>Workspace information</button><button onClick={() => navigate("SQL Insights")}>Data source settings</button><div className="profile-footer">{dataMode === "oracle" ? "Oracle workspace · Live data" : dataMode === "loading" ? "Checking data connection…" : "Demo workspace · Session-only edits"}</div></div>}</div></div></header>
-      <main className="main-content" id="main-content">{content}</main>
-      <footer className="app-footer"><span>© 2026 AgriTrack · Project prototype</span><span>{dataMode === "loading" ? "Connecting to data service…" : dataMode === "oracle" ? "Live Oracle data" : "Demo mode · Sample data · Oracle unavailable"}</span></footer>
+      <header className="topbar"><button className="mobile-menu-button icon-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu /></button><div className="topbar-breadcrumb"><span>AgriTrack</span><span className="breadcrumb-slash">/</span><strong>{activePage}</strong></div><span className={`data-mode-indicator ${dataMode}`}>{dataMode === "loading" ? "Connecting" : dataMode === "oracle" ? "Oracle live" : "Database error"}</span><GlobalSearch shipments={shipments} value={search} onValue={setSearch} onSelect={(shipment) => { navigate("Shipment Tracking"); setSelectedShipment(shipment) }} /><div className="topbar-actions"><span className="topbar-date">{today}</span><div className="topbar-popover-wrap"><button className={`icon-button topbar-icon ${notificationOpen ? "selected" : ""}`} aria-label={`Notifications, ${highRisk.length + delayed.length} items`} aria-expanded={notificationOpen} onClick={() => { setNotificationOpen((open) => !open); setProfileOpen(false) }}><Bell /><i className="notification-dot" /></button>{notificationOpen && <div className="topbar-popover notification-popover"><div className="popover-heading"><strong>Operations alerts</strong><span>{highRisk.length + delayed.length} to review</span></div>{highRisk.slice(0, 3).map((shipment) => <button key={`risk-${shipment.id}`} onClick={() => { setSelectedShipment(shipment); setNotificationOpen(false) }}><span className="popover-alert-icon red"><ShieldAlert /></span><span><strong>{shipment.id} · {shipment.crop}</strong><small>{getLossPercentage(shipment).toFixed(1)}% recorded loss · {shipment.region}</small></span></button>)}{delayed.slice(0, 2).map((shipment) => <button key={`delay-${shipment.id}`} onClick={() => { setSelectedShipment(shipment); setNotificationOpen(false) }}><span className="popover-alert-icon amber"><Activity /></span><span><strong>{shipment.id} is delayed</strong><small>{shipment.origin} to {shipment.destination}</small></span></button>)}{!highRisk.length && !delayed.length && <p className="popover-empty">All shipments look on track.</p>}<button className="popover-footer-link" onClick={() => navigate("Loss Detection")}>Open loss detection <span>→</span></button></div>}</div><div className="topbar-popover-wrap"><button className="profile-top-button" onClick={() => { setProfileOpen((open) => !open); setNotificationOpen(false) }} aria-expanded={profileOpen}><span className="user-avatar small-avatar">AK</span><ChevronDown aria-hidden="true" /></button>{profileOpen && <div className="topbar-popover profile-popover"><div className="profile-popover-header"><span className="user-avatar">AK</span><div><strong>Arjun Kumar</strong><small>Navami Ventures</small></div></div><button onClick={() => { setProfileOpen(false); setHelpOpen(true) }}>Workspace information</button><button onClick={() => navigate("SQL Insights")}>Data source settings</button><div className="profile-footer">{dataMode === "oracle" ? "Oracle workspace · Live data" : dataMode === "loading" ? "Checking data connection…" : "Database unavailable · Edits disabled"}</div></div>}</div></div></header>
+      <main className="main-content" id="main-content">
+        {dataMode === "loading" && <div className="database-status-banner" role="status">Connecting to Oracle and loading dashboard records…</div>}
+        {dataMode === "error" && <div className="database-status-banner error" role="alert"><div><strong>Oracle data unavailable</strong><span>{dataError || "Dashboard records were not loaded."}</span></div><button className="button-quiet" onClick={() => void loadData()}>Retry connection</button></div>}
+        {content}
+      </main>
+      <footer className="app-footer"><span>© 2026 AgriTrack · Project prototype</span><span>{dataMode === "loading" ? "Connecting to Oracle…" : dataMode === "oracle" ? "Live Oracle data" : "Oracle unavailable · No sample data displayed"}</span></footer>
     </div>
     {selectedShipment && <ShipmentDetailDialog shipment={selectedShipment} onClose={() => setSelectedShipment(null)} />}
     {toastMessage && <div className="toast-message" role="status"><span className="toast-check">✓</span>{toastMessage}<button aria-label="Dismiss notification" onClick={() => setToastMessage("")}>×</button></div>}
-    {helpOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setHelpOpen(false) }}><section className="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-heading"><div><span className="modal-eyebrow">WORKSPACE GUIDE</span><h2 id="help-title">About this project</h2></div><button className="icon-button" onClick={() => setHelpOpen(false)} aria-label="Close"><X /></button></div><p className="help-modal-copy">AgriTrack is an agricultural supply-chain dashboard for monitoring produce movement and post-harvest loss. {dataMode === "oracle" ? "This workspace is currently reading its operational records from Oracle." : dataMode === "loading" ? "The app is checking Oracle availability." : "The app is using labelled sample data because Oracle is not configured or reachable."}</p><div className="help-modal-points"><div><strong>Data model</strong><span>{shipments.length} loaded shipment records across {cropCatalog.length} crops.</span></div><div><strong>Data lifecycle</strong><span>{dataMode === "oracle" ? "Supported shipment and crop edits are sent to Oracle and reload the shared analytics." : "Demo edits update this browser session only and are not persisted."}</span></div><div><strong>Oracle integration</strong><span>The SQL Insights page executes the eight allowlisted reports on the server when Oracle is available.</span></div></div><button className="button-primary" onClick={() => { setHelpOpen(false); navigate("Supply Chain Records") }}>Open data management <span aria-hidden="true">→</span></button></section></div>}
+    {helpOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setHelpOpen(false) }}><section className="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title"><div className="modal-heading"><div><span className="modal-eyebrow">WORKSPACE GUIDE</span><h2 id="help-title">About this project</h2></div><button className="icon-button" onClick={() => setHelpOpen(false)} aria-label="Close"><X /></button></div><p className="help-modal-copy">AgriTrack is an agricultural supply-chain dashboard for monitoring produce movement and post-harvest loss. {dataMode === "oracle" ? "This workspace is currently reading its operational records from Oracle." : dataMode === "loading" ? "The app is checking Oracle availability." : "Oracle could not be reached, so the app is showing a connection error without substituting sample records."}</p><div className="help-modal-points"><div><strong>Data model</strong><span>{shipments.length} loaded shipment records across {cropCatalog.length} crops.</span></div><div><strong>Data lifecycle</strong><span>{dataMode === "oracle" ? "Supported shipment and crop edits are sent to Oracle and reload the shared analytics." : "Edits are disabled until Oracle data is available."}</span></div><div><strong>Oracle integration</strong><span>The SQL Insights page executes the eight allowlisted reports on the server when Oracle is available.</span></div></div><button className="button-primary" onClick={() => { setHelpOpen(false); navigate("Supply Chain Records") }}>Open data management <span aria-hidden="true">→</span></button></section></div>}
   </div>
 }

@@ -4,16 +4,14 @@
   "private": true,
   "packageManager": "pnpm@12.3.4",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "dev": "next dev frontend --webpack",
+    "build": "next build frontend --webpack",
+    "start": "next start frontend",
+    "typecheck": "tsc --noEmit -p frontend/tsconfig.json"
   },
   "dependencies": {
-    "@base-ui/react": "^1.5.0",
     "@vercel/analytics": "1.6.1",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cn": "^0.5.2",
     "lucide-react": "^1.16.0",
     "next": "16.4.3",
     "oracledb": "^26.0.0",

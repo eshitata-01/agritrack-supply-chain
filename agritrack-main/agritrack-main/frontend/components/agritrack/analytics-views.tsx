@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YA
 import { ArrowDownRight, ArrowUpRight, Search, Warehouse, Route, PackageOpen, Percent } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart"
-import { REGIONS, formatDate, formatKg, formatTonnes, getCropTotals, getFacilityTotals, getLossPercentage, getLossQuantity, getRegionTotals, getRouteTotals, type Shipment } from "@/lib/agritrack-data"
+import { formatDate, formatKg, formatTonnes, getCropTotals, getFacilityTotals, getLossPercentage, getLossQuantity, getRegionTotals, getRouteTotals, type Shipment } from "@/lib/agritrack-data"
 
 type FilterState = { crop: string; region: string; from: string; to: string; query: string }
 const emptyFilters: FilterState = { crop: "All crops", region: "All regions", from: "", to: "", query: "" }
@@ -22,11 +22,11 @@ function useShipmentFilters(shipments: Shipment[]) {
   return { filters, setFilters, filtered }
 }
 
-function FiltersBar({ filters, setFilters, crops, showCrop = true }: { filters: FilterState; setFilters: (next: FilterState) => void; crops: string[]; showCrop?: boolean }) {
+function FiltersBar({ filters, setFilters, crops, regions, showCrop = true }: { filters: FilterState; setFilters: (next: FilterState) => void; crops: string[]; regions: string[]; showCrop?: boolean }) {
   return <div className="analytics-filterbar">
     <label className="search-control"><Search /><input value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} placeholder="Search this view..." aria-label="Search this view" /></label>
     {showCrop && <label className="filter-select"><select value={filters.crop} onChange={(event) => setFilters({ ...filters, crop: event.target.value })}><option>All crops</option>{crops.map((crop) => <option key={crop}>{crop}</option>)}</select></label>}
-    <label className="filter-select"><select value={filters.region} onChange={(event) => setFilters({ ...filters, region: event.target.value })}><option>All regions</option>{REGIONS.map((region) => <option key={region}>{region}</option>)}</select></label>
+    <label className="filter-select"><select value={filters.region} onChange={(event) => setFilters({ ...filters, region: event.target.value })}><option>All regions</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></label>
     <div className="date-filter-pair"><label><span className="sr-only">From date</span><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label><span>to</span><label><span className="sr-only">To date</span><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label></div>
     {(filters.crop !== "All crops" || filters.region !== "All regions" || filters.from || filters.to || filters.query) && <button className="clear-filters" onClick={() => setFilters(emptyFilters)}>Clear filters</button>}
   </div>
@@ -45,7 +45,7 @@ function Table({ columns, rows, emptyText = "No matching records." }: { columns:
 
 const chartConfig = { lossTonnes: { label: "Loss (t)", color: "var(--chart-1)" }, lossPct: { label: "Loss %", color: "var(--chart-2)" } }
 
-export function CropAnalyticsView({ shipments, crops }: { shipments: Shipment[]; crops: string[] }) {
+export function CropAnalyticsView({ shipments, crops, regions }: { shipments: Shipment[]; crops: string[]; regions: string[] }) {
   const { filters, setFilters, filtered } = useShipmentFilters(shipments)
   const cropRows = getCropTotals(filtered)
   const collected = filtered.reduce((sum, shipment) => sum + shipment.qtyDispatched, 0)
@@ -54,7 +54,7 @@ export function CropAnalyticsView({ shipments, crops }: { shipments: Shipment[];
   const topCrop = cropRows[0]
   return <div className="page-stack">
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> CROP PERFORMANCE</div><h1>Crop analytics</h1><p>Compare harvested quantities and identify crops with the greatest recorded loss.</p></div><span className="data-source-badge"><i /> Current data</span></div>
-    <FiltersBar filters={filters} setFilters={setFilters} crops={crops} />
+    <FiltersBar filters={filters} setFilters={setFilters} crops={crops} regions={regions} />
     <section className="analytics-stat-grid">
       <StatTile label="Crops analyzed" value={String(new Set(filtered.map((item) => item.crop)).size)} note="Crop types in this selection" icon={PackageOpen} />
       <StatTile label="Quantity harvested" value={formatTonnes(collected)} unit="t" note="Across selected records" icon={PackageOpen} tone="sage" />
@@ -69,7 +69,7 @@ export function CropAnalyticsView({ shipments, crops }: { shipments: Shipment[];
   </div>
 }
 
-export function StorageMonitoringView({ shipments, crops }: { shipments: Shipment[]; crops: string[] }) {
+export function StorageMonitoringView({ shipments, crops, regions }: { shipments: Shipment[]; crops: string[]; regions: string[] }) {
   const { filters, setFilters, filtered } = useShipmentFilters(shipments)
   const facilities = getFacilityTotals(filtered)
   const totalLoss = filtered.reduce((sum, shipment) => sum + shipment.stageLoss.storage, 0)
@@ -78,7 +78,7 @@ export function StorageMonitoringView({ shipments, crops }: { shipments: Shipmen
   const scatter = filtered.map((shipment) => ({ duration: shipment.storageDays, lossPct: shipment.qtyDispatched ? (shipment.stageLoss.storage / shipment.qtyDispatched) * 100 : 0, crop: shipment.crop, facility: shipment.facility }))
   return <div className="page-stack">
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> POST-HARVEST CONDITIONS</div><h1>Storage monitoring</h1><p>Review facility performance, storage duration, and recorded deterioration.</p></div><span className="data-source-badge"><i /> {facilities.length} facilities with records</span></div>
-    <FiltersBar filters={filters} setFilters={setFilters} crops={crops} />
+    <FiltersBar filters={filters} setFilters={setFilters} crops={crops} regions={regions} />
     <section className="analytics-stat-grid">
       <StatTile label="Active facilities" value={String(facilities.length)} note="With selected storage records" icon={Warehouse} />
       <StatTile label="Produce stored" value={formatTonnes(filtered.reduce((sum, item) => sum + Math.max(0, item.qtyDispatched - item.stageLoss.harvest), 0))} unit="t" note="After harvest-stage loss" icon={PackageOpen} tone="sage" />
@@ -90,11 +90,11 @@ export function StorageMonitoringView({ shipments, crops }: { shipments: Shipmen
       <Card className="chart-card analytics-chart-card"><CardHeader className="chart-card-header"><div><CardTitle>Duration vs. storage loss</CardTitle><p className="card-subtitle">Each point represents one shipment record</p></div></CardHeader><CardContent className="chart-card-content"><ChartContainer config={chartConfig} className="chart-frame analytics-bar-frame"><ScatterChart margin={{ left: -10, right: 16, bottom: 3 }}><CartesianGrid strokeDasharray="3 5" stroke="var(--border)" /><XAxis type="number" dataKey="duration" name="Storage days" unit="d" axisLine={false} tickLine={false} /><YAxis type="number" dataKey="lossPct" name="Storage loss" unit="%" axisLine={false} tickLine={false} /><Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent />} /><Scatter data={scatter} fill="var(--chart-1)" /></ScatterChart></ChartContainer></CardContent></Card>
     </div>
     <Card className="table-card"><div className="section-card-heading"><div><h2>Facility performance</h2><p>Facilities with unusually high loss are highlighted for review</p></div><span className="rank-caption">Avg. storage duration {avgDays.toFixed(1)} days</span></div><Table columns={[{ key: "facilityId", label: "Facility ID" }, { key: "facility", label: "Facility" }, { key: "location", label: "Location" }, { key: "crop", label: "Crop" }, { key: "quantity", label: "Quantity stored" }, { key: "averageDays", label: "Avg. days" }, { key: "loss", label: "Quantity lost" }, { key: "lossPct", label: "Loss rate" }]} rows={facilities.map((item) => ({ id: item.facilityId, facilityId: item.facilityId, facility: item.facility, location: item.location, crop: item.crop, quantity: `${formatKg(item.quantityStoredKg)} kg`, averageDays: `${item.averageDays.toFixed(1)} days`, loss: `${formatKg(item.lossKg)} kg`, lossPct: `${item.lossPct.toFixed(1)}%` }))} /></Card>
-    <Card className="note-card"><span className="note-mark">!</span><p>{top ? <><strong>{top.facility}</strong> currently has the highest storage loss rate in this selection ({top.lossPct.toFixed(1)}%).</> : "No storage data matches the current filters."} This observation is descriptive and based on recorded sample values.</p></Card>
+    <Card className="note-card"><span className="note-mark">!</span><p>{top ? <><strong>{top.facility}</strong> currently has the highest storage loss rate in this selection ({top.lossPct.toFixed(1)}%).</> : "No storage data matches the current filters."} This observation is descriptive and based on loaded Oracle records.</p></Card>
   </div>
 }
 
-export function TransportationView({ shipments, crops }: { shipments: Shipment[]; crops: string[] }) {
+export function TransportationView({ shipments, crops, regions }: { shipments: Shipment[]; crops: string[]; regions: string[] }) {
   const { filters, setFilters, filtered } = useShipmentFilters(shipments)
   const routes = getRouteTotals(filtered)
   const delayed = filtered.filter((item) => item.status === "Delayed")
@@ -103,7 +103,7 @@ export function TransportationView({ shipments, crops }: { shipments: Shipment[]
   const highest = routes[0]
   return <div className="page-stack">
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> IN-TRANSIT PERFORMANCE</div><h1>Transportation</h1><p>Compare routes and inspect how delays correlate with recorded transport loss.</p></div><span className="data-source-badge"><i /> {routes.length} active routes</span></div>
-    <FiltersBar filters={filters} setFilters={setFilters} crops={crops} />
+    <FiltersBar filters={filters} setFilters={setFilters} crops={crops} regions={regions} />
     <section className="analytics-stat-grid">
       <StatTile label="Active routes" value={String(routes.length)} note="Routes with selected records" icon={Route} />
       <StatTile label="Dispatched" value={formatTonnes(filtered.reduce((sum, item) => sum + item.qtyDispatched, 0))} unit="t" note="Across filtered shipments" icon={PackageOpen} tone="sage" />
